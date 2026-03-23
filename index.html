@@ -3,13 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>TransitHub | Modern Transport Admin</title>
-    <!-- Bootstrap 5 + Icons + Fonts + Mapbox + Chart.js -->
+    <title>BookyAdmin | Modern Transport Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.css' rel='stylesheet' />
-    <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
@@ -24,7 +22,6 @@
             overflow-x: hidden;
         }
 
-        /* Modern sidebar with glassmorphism effect */
         :root {
             --sidebar-width: 280px;
             --primary-deep-teal: #0f3b3c;
@@ -106,14 +103,12 @@
             box-shadow: 0 6px 14px rgba(30,111,92,0.3);
         }
 
-        /* Main content area */
         .main-content {
             margin-left: var(--sidebar-width);
             padding: 28px 36px;
             min-height: 100vh;
         }
 
-        /* Modern cards */
         .stat-card-modern {
             background: white;
             border-radius: var(--card-radius);
@@ -149,7 +144,6 @@
             line-height: 1.2;
         }
 
-        /* Table styling */
         .modern-table {
             background: white;
             border-radius: 20px;
@@ -241,25 +235,17 @@
         }
 
         @media (max-width: 992px) {
-            .sidebar {
-                transform: translateX(-100%);
-                transition: 0.2s;
-            }
-            .main-content {
-                margin-left: 0;
-            }
-            body.sidebar-open .sidebar {
-                transform: translateX(0);
-            }
+            .sidebar { transform: translateX(-100%); transition: 0.2s; }
+            .main-content { margin-left: 0; }
+            body.sidebar-open .sidebar { transform: translateX(0); }
         }
     </style>
 </head>
 <body>
 
-<!-- Sidebar Navigation -->
 <div class="sidebar d-flex flex-column">
     <div class="logo-area">
-        <h3><i class="fas fa-bus me-2"></i>TransitHub</h3>
+        <h3>Booky Admin</h3>
         <p>Intelligent transport admin</p>
     </div>
     <ul class="nav nav-pills flex-column mb-auto">
@@ -274,9 +260,7 @@
     </div>
 </div>
 
-<!-- Main Dashboard Content -->
 <div class="main-content">
-    <!-- Overview Section -->
     <section id="overview-section">
         <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
             <h2><i class="fas fa-tachometer-alt me-2" style="color: var(--accent-teal);"></i> Dashboard Overview</h2>
@@ -314,12 +298,11 @@
         </div>
     </section>
 
-    <!-- Manage Cities Section -->
     <section id="locations-section" style="display:none;">
         <h2><i class="fas fa-map-marker-alt me-2"></i>Manage Cities</h2>
         <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
             <div class="row g-3">
-                <div class="col-md-8"><input type="text" id="cityName" class="form-control form-modern" placeholder="City name, e.g., Kandy, Galle, Colombo"></div>
+                <div class="col-md-8"><input type="text" id="cityName" class="form-control form-modern" placeholder="City name"></div>
                 <div class="col-md-4"><button class="btn btn-teal-custom w-100" onclick="addLocation()"><i class="fas fa-plus-circle me-1"></i> Add City</button></div>
             </div>
         </div>
@@ -331,19 +314,18 @@
         </div>
     </section>
 
-    <!-- Add Schedules Section -->
     <section id="schedules-section" style="display:none;">
         <h2><i class="fas fa-bus me-2"></i>Bus Scheduling</h2>
         <div class="card border-0 shadow-sm rounded-4 p-4">
             <form id="scheduleForm">
                 <div class="row g-4">
-                    <div class="col-md-6"><label class="form-label fw-semibold">Bus Number</label><input type="text" id="busNo" class="form-control form-modern" placeholder="e.g., ND-4567" required></div>
-                    <div class="col-md-6"><label class="form-label fw-semibold">Contact Phone</label><input type="text" id="phone" class="form-control form-modern" placeholder="+94 77 123 4567"></div>
+                    <div class="col-md-6"><label class="form-label fw-semibold">Bus Number</label><input type="text" id="busNo" class="form-control form-modern" required></div>
+                    <div class="col-md-6"><label class="form-label fw-semibold">Contact Phone</label><input type="text" id="phone" class="form-control form-modern"></div>
                     <div class="col-md-5"><label class="form-label fw-semibold">From City</label><select id="fromCity" class="form-select form-modern" required></select></div>
                     <div class="col-md-5"><label class="form-label fw-semibold">To City</label><select id="toCity" class="form-select form-modern" required></select></div>
-                    <div class="col-md-2"><label class="form-label fw-semibold">Price (Rs.)</label><input type="number" id="price" class="form-control form-modern" placeholder="Price" required></div>
+                    <div class="col-md-2"><label class="form-label fw-semibold">Price (Rs.)</label><input type="number" id="price" class="form-control form-modern" required></div>
                     <div class="col-md-6"><label class="form-label fw-semibold">Departure Time</label><input type="datetime-local" id="depTime" class="form-control form-modern" required></div>
-                    <div class="col-md-6"><label class="form-label fw-semibold">Recurrence</label><select id="scheduleType" class="form-select form-modern"><option value="single">Single (One Time)</option><option value="daily">Daily (Repeat every day)</option></select></div>
+                    <div class="col-md-6"><label class="form-label fw-semibold">Recurrence</label><select id="scheduleType" class="form-select form-modern"><option value="single">Single (One Time)</option><option value="daily">Daily</option></select></div>
                 </div>
                 <div class="mt-4"><label class="form-label fw-semibold">Route Preview (Map)</label><div id="map"></div></div>
                 <button type="submit" class="btn btn-teal-custom w-100 mt-4 py-3"><i class="fas fa-plus-circle me-2"></i> Publish Schedule</button>
@@ -351,7 +333,6 @@
         </div>
     </section>
 
-    <!-- View Bookings Section (mock data) -->
     <section id="bookings-section" style="display:none;">
         <h2><i class="fas fa-ticket-alt me-2"></i>Recent Bookings</h2>
         <div class="card border-0 shadow-sm rounded-4 p-0 overflow-hidden">
@@ -364,12 +345,11 @@
         </div>
     </section>
 
-    <!-- Manage Users Section (mock data) -->
     <section id="users-section" style="display:none;">
         <h2><i class="fas fa-users me-2"></i>Manage Users</h2>
         <div class="card border-0 shadow-sm rounded-4 p-0 overflow-hidden">
             <table class="modern-table mb-0">
-                <thead><tr><th>User ID</th><th>Full Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead>
+                <thead><tr><th>User ID</th><th>Full Name</th><th>Email</th><th>Mobile</th><th>Actions</th></tr></thead>
                 <tbody id="usersTableBody"></tbody>
             </table>
         </div>
@@ -378,221 +358,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src='https://api.mapbox.com/mapbox-gl-js/v2.14.1/mapbox-gl.js'></script>
-<script>
-    // ------------------------- DATA MODELS (Local Storage Simulation) -------------------------
-    let cities = [
-        { id: 1, name: "Colombo" },
-        { id: 2, name: "Kandy" },
-        { id: 3, name: "Galle" }
-    ];
-    let schedules = [];        // array of schedule objects
-    let bookings = [];         // mock bookings (linked to schedules)
-    let users = [];            // mock users
 
-    // Helper: generate IDs
-    function generateId(arr) { return arr.length ? Math.max(...arr.map(i => i.id)) + 1 : 1; }
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 
-    // Load initial mock data for professional demo
-    function initMockData() {
-        if (localStorage.getItem("transit_cities")) {
-            cities = JSON.parse(localStorage.getItem("transit_cities"));
-        } else {
-            cities = [{ id: 1, name: "Colombo" }, { id: 2, name: "Kandy" }, { id: 3, name: "Galle" }];
-            saveCities();
-        }
-        if (localStorage.getItem("transit_schedules")) {
-            schedules = JSON.parse(localStorage.getItem("transit_schedules"));
-        } else {
-            const now = new Date();
-            const demoDate = new Date(now.getTime() + 86400000).toISOString().slice(0,16);
-            schedules = [
-                { id: 101, busNo: "ND-1234", phone: "0771234567", fromCity: "Colombo", toCity: "Kandy", price: 450, departure: demoDate, scheduleType: "daily" },
-                { id: 102, busNo: "AB-5678", phone: "0769876543", fromCity: "Kandy", toCity: "Galle", price: 650, departure: demoDate, scheduleType: "single" }
-            ];
-            saveSchedules();
-        }
-        if (localStorage.getItem("transit_bookings")) {
-            bookings = JSON.parse(localStorage.getItem("transit_bookings"));
-        } else {
-            bookings = [
-                { id: 1001, passenger: "Sanjana Perera", route: "Colombo → Kandy", date: "2025-04-15", status: "Confirmed" },
-                { id: 1002, passenger: "Malith Jayawardena", route: "Kandy → Galle", date: "2025-04-16", status: "Pending" }
-            ];
-            saveBookings();
-        }
-        if (localStorage.getItem("transit_users")) {
-            users = JSON.parse(localStorage.getItem("transit_users"));
-        } else {
-            users = [
-                { id: 1, fullName: "Admin User", email: "admin@transithub.com", role: "Super Admin", status: "Active" },
-                { id: 2, fullName: "Nimal Siriwardena", email: "nimal@example.com", role: "Operator", status: "Active" },
-                { id: 3, fullName: "Kamala Perera", email: "kamala@example.com", role: "Customer", status: "Inactive" }
-            ];
-            saveUsers();
-        }
-        updateStatsAndRender();
-    }
-    function saveCities() { localStorage.setItem("transit_cities", JSON.stringify(cities)); }
-    function saveSchedules() { localStorage.setItem("transit_schedules", JSON.stringify(schedules)); updateStatsAndRender(); }
-    function saveBookings() { localStorage.setItem("transit_bookings", JSON.stringify(bookings)); updateStatsAndRender(); }
-    function saveUsers() { localStorage.setItem("transit_users", JSON.stringify(users)); updateStatsAndRender(); }
-
-    // Update UI stats & tables
-    function updateStatsAndRender() {
-        document.getElementById("totalUsersCount").innerText = users.length;
-        const totalBookings = bookings.length;
-        document.getElementById("totalBookingsCount").innerText = totalBookings;
-        document.getElementById("activeBusesCount").innerText = schedules.length;
-        const totalRevenue = schedules.reduce((sum, s) => sum + (Number(s.price) || 0), 0) * 12; // mock realistic
-        document.getElementById("revenueTotal").innerText = totalRevenue.toLocaleString();
-        renderLocationTable();
-        renderBookingsTable();
-        renderUsersTable();
-        renderCitySelects();
-    }
-
-    function renderLocationTable() {
-        const tbody = document.getElementById("locationTableBody");
-        if(!tbody) return;
-        tbody.innerHTML = "";
-        cities.forEach(city => {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td>${city.id}</td>
-                <td><i class="fas fa-location-dot me-2 text-teal"></i>${escapeHtml(city.name)}</td>
-                <td><button class="btn btn-outline-teal btn-sm" onclick="deleteCity(${city.id})"><i class="fas fa-trash-alt"></i> Delete</button></td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
-
-    function renderBookingsTable() {
-        const tbody = document.getElementById("bookingsTableBody");
-        if(!tbody) return;
-        tbody.innerHTML = bookings.length ? bookings.map(b => `
-            <tr><td>#${b.id}</td><td>${escapeHtml(b.passenger)}</td><td>${escapeHtml(b.route)}</td><td>${b.date}</td><td><span class="badge bg-${b.status === 'Confirmed' ? 'success' : 'warning'} bg-opacity-10 text-dark px-3 py-1 rounded-pill">${b.status}</span></td></tr>
-        `).join('') : `<tr><td colspan="5" class="text-center text-muted">No bookings yet</td></tr>`;
-    }
-
-    function renderUsersTable() {
-        const tbody = document.getElementById("usersTableBody");
-        if(!tbody) return;
-        tbody.innerHTML = users.map(u => `
-            <tr><td>${u.id}</td><td><i class="fas fa-user-circle me-2"></i>${escapeHtml(u.fullName)}</td><td>${escapeHtml(u.email)}</td><td>${u.role}</td><td><span class="badge rounded-pill bg-${u.status === 'Active' ? 'success' : 'secondary'} bg-opacity-10 text-dark">${u.status}</span></td></tr>
-        `).join('');
-    }
-
-    function renderCitySelects() {
-        const fromSelect = document.getElementById("fromCity");
-        const toSelect = document.getElementById("toCity");
-        if(fromSelect && toSelect){
-            let options = '<option value="">Select city</option>' + cities.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
-            fromSelect.innerHTML = options;
-            toSelect.innerHTML = options;
-        }
-    }
-
-    function deleteCity(id) {
-        if(cities.length <= 1) { alert("At least one city required for system integrity."); return; }
-        cities = cities.filter(c => c.id !== id);
-        saveCities();
-        updateStatsAndRender();
-    }
-
-    function addLocation() {
-        const input = document.getElementById("cityName");
-        let newName = input.value.trim();
-        if(!newName) return alert("Please enter a city name");
-        if(cities.some(c => c.name.toLowerCase() === newName.toLowerCase())) return alert("City already exists");
-        const newId = generateId(cities);
-        cities.push({ id: newId, name: newName });
-        saveCities();
-        input.value = "";
-        updateStatsAndRender();
-    }
-
-    // Schedule form submit handler
-    document.getElementById("scheduleForm")?.addEventListener("submit", function(e){
-        e.preventDefault();
-        const busNo = document.getElementById("busNo").value.trim();
-        const phone = document.getElementById("phone").value.trim();
-        const fromCity = document.getElementById("fromCity").value;
-        const toCity = document.getElementById("toCity").value;
-        const price = parseFloat(document.getElementById("price").value);
-        const depTime = document.getElementById("depTime").value;
-        const scheduleType = document.getElementById("scheduleType").value;
-        if(!busNo || !fromCity || !toCity || !price || !depTime) return alert("Please fill all mandatory fields");
-        if(fromCity === toCity) return alert("Origin and destination must be different");
-        const newId = generateId(schedules);
-        schedules.push({
-            id: newId, busNo, phone, fromCity, toCity, price, departure: depTime, scheduleType
-        });
-        saveSchedules();
-        // Mock add a booking for demonstration
-        bookings.unshift({ id: Date.now(), passenger: "New booking (auto)", route: `${fromCity} → ${toCity}`, date: new Date().toLocaleDateString(), status: "Confirmed" });
-        saveBookings();
-        alert("Schedule added successfully! +1 mock booking");
-        document.getElementById("scheduleForm").reset();
-        updateStatsAndRender();
-        // Optional: show overview tab after success
-        showSection('overview');
-    });
-
-    // Mapbox GL (modern map with fallback token)
-    mapboxgl.accessToken = 'pk.eyJ1IjoibWFwYm94LXVzZXIiLCJhIjoiY2s3cGJxY3R5MDFuejNkbzQwY3B4c3ZkdyJ9.8tYlzQ5kX6VJpUYvWJp6Lg'; // demo public token (limited but works for base style)
-    let mapInstance = null;
-    function initMap() {
-        if (!document.getElementById("map") || mapInstance) return;
-        try {
-            mapInstance = new mapboxgl.Map({
-                container: 'map',
-                style: 'mapbox://styles/mapbox/light-v11',
-                center: [79.8612, 7.8731], // centered Sri Lanka
-                zoom: 7.2,
-                interactive: true
-            });
-            mapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right');
-        } catch(e) { console.warn("Mapbox token issue, using fallback preview"); }
-    }
-
-    // Section switching with active nav highlight
-    function showSection(sectionId) {
-        document.querySelectorAll('section').forEach(sec => sec.style.display = 'none');
-        const activeSection = document.getElementById(`${sectionId}-section`);
-        if(activeSection) activeSection.style.display = 'block';
-        document.querySelectorAll('.sidebar .nav-link').forEach(link => link.classList.remove('active'));
-        const activeLink = document.querySelector(`.sidebar .nav-link[data-section="${sectionId}"]`);
-        if(activeLink) activeLink.classList.add('active');
-        if(sectionId === 'schedules') setTimeout(() => { if(!mapInstance) initMap(); else mapInstance.resize(); }, 100);
-    }
-
-    // Attach click listeners to nav
-    document.querySelectorAll('.sidebar .nav-link').forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const section = link.getAttribute('data-section');
-            if(section) showSection(section);
-        });
-    });
-
-    function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
-
-    // Chart init
-    let revenueChart;
-    function initChart() {
-        const ctx = document.getElementById('revenueChart').getContext('2d');
-        revenueChart = new Chart(ctx, {
-            type: 'line',
-            data: { labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'], datasets: [{ label: 'Bookings count', data: [24, 32, 41, 38, 55, 62], borderColor: '#1e6f5c', backgroundColor: 'rgba(30,111,92,0.05)', tension: 0.3, fill: true, pointBackgroundColor: '#289672', pointRadius: 4 }] },
-            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'top' } } }
-        });
-    }
-
-    // Refresh stats on load & set overview active
-    initMockData();
-    initChart();
-    showSection('overview');
-    setTimeout(() => { if(document.getElementById('map')) initMap(); }, 500);
-</script>
+<script src="script.js"></script>
 </body>
 </html>
