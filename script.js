@@ -1,4 +1,7 @@
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+
+mapboxgl.accessToken = 'pk.eyJ1IjoicHJhbW9kOTE4NCIsImEiOiJjbW12eXF4YnIwbWdhMnNwejVweGQ1ODR5In0.VypLwtDMmky5fa7kKF4Hyg'; 
+// Firebase Configuration
+
 const firebaseConfig = {
   apiKey: "AIzaSyB26tawJ3La7cSldcfP6ldyfZNf2HdFafc",
   authDomain: "bookyapp-bef0e.firebaseapp.com",
@@ -10,297 +13,704 @@ const firebaseConfig = {
   measurementId: "G-4GH90XM7P7"
 };
 
-// Firebase Initialize කිරීම
+// Firebase Initialize
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+// Global modal instance
+let editModal;
 
-
-
+// ------------------------- DASHBOARD STATS -------------------------
 function loadDashboardStats() {
-    // Total Users
     db.collection("Users").onSnapshot(snap => {
         document.getElementById("totalUsersCount").innerText = snap.size;
     });
 
-    // Total Bookings
     db.collection("Bookings").onSnapshot(snap => {
         document.getElementById("totalBookingsCount").innerText = snap.size;
+        let totalRevenue = 0;
+        snap.forEach(doc => {
+            totalRevenue += (doc.data().totalPrice || 0);
+        });
+        document.getElementById("revenueTotal").innerText = totalRevenue.toLocaleString();
     });
 
-    // Active Schedules
     db.collection("Schedules").onSnapshot(snap => {
         document.getElementById("activeBusesCount").innerText = snap.size;
     });
 }
 
-
-async function fetchLocations() {
+// ------------------------- LOCATIONS (CITIES) -------------------------
+function fetchLocations() {
     const tbody = document.getElementById("locationTableBody");
+    const fromCity = document.getElementById("fromCity");
+    const toCity = document.getElementById("toCity");
+
     if (!tbody) return;
 
-    // Firestore එකේ "Locations" collection එකට reference එකක් ගන්නවා
+    // Real-time listener for Locations collection
     db.collection("Locations").onSnapshot((querySnapshot) => {
-        tbody.innerHTML = ""; // කලින් තිබ්බ ඒවා clear කරනවා
-        
-        querySnapshot.forEach((doc) => {
-            const cityData = doc.data();
-            const cityName = doc.id; // ඔයා Document ID එක විදිහට නම දීලා තියෙන නිසා
+        tbody.innerHTML = ""; 
+        let options = '<option value="">Select City</option>';
 
+        if (querySnapshot.empty) {
+            console.warn("No locations found in Firebase!");
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center">No locations added yet.</td></tr>';
+        }
+
+        querySnapshot.forEach((doc) => {
+            const cityName = doc.id; // මෙතන doc.id කියන්නේ City name එක
+            
+            // Table එක update කිරීම
             const tr = document.createElement("tr");
             tr.innerHTML = `
-                <td>${doc.id.substring(0, 5)}...</td> 
+                <td>${cityName.substring(0, 5)}...</td> 
                 <td><i class="fas fa-location-dot me-2 text-teal"></i>${cityName}</td>
                 <td>
-                    <button class="btn btn-outline-danger btn-sm" onclick="deleteLocation('${doc.id}')">
+                    <button class="btn btn-outline-danger btn-sm" onclick="deleteLocation('${cityName}')">
                         <i class="fas fa-trash-alt"></i> Delete
                     </button>
                 </td>
             `;
             tbody.appendChild(tr);
+
+            // Dropdown options එකතු කිරීම
+            options += `<option value="${cityName}">${cityName}</option>`;
         });
+
+        // Dropdowns update කිරීම
+        if (fromCity) fromCity.innerHTML = options;
+        if (toCity) toCity.innerHTML = options;
         
-        // Schedule පේජ් එකේ තියෙන Dropdowns (From/To) ටිකත් Update කරනවා
-        renderCitySelects(querySnapshot);
+        console.log("Locations updated successfully.");
+    }, (error) => {
+        console.error("Error fetching locations: ", error);
     });
 }
 
-// නගරයක් මකා දැමීම සඳහා
-function deleteLocation(id) {
-    if(confirm("Are you sure you want to delete this city?")) {
-        db.collection("Locations").doc(id).delete().then(() => {
-            console.log("City deleted!");
-        });
-    }
-}
-
-fetchLocations();
-
-
-// නගරයක් එකතු කිරීම
 async function addLocation() {
     const input = document.getElementById("cityName");
     const name = input.value.trim();
-
+    
+    // 1. නම ඇතුළත් කරලා නැත්නම් alert එකක් දෙනවා
     if (!name) return alert("Enter city name!");
 
+    // 2. මැප් එකේ ලොකේෂන් එකක් සිලෙක්ට් කරලා නැත්නම් alert එකක් දෙනවා
+    // (selectedLocation කියන්නේ mapLocations.on('click') එකෙන් අපිට ලැබෙන අගය)
+    if (!selectedLocation) {
+        return alert("Please click on the map to select the exact location!");
+    }
+
     try {
-        // 1. මුලින්ම බලනවා මේ නමින් නගරයක් දැනටමත් තියෙනවද කියලා
+        // 3. දැන් අපි Mapbox API එකට කෝල් කරන්නේ නැහැ. 
+        // කෙලින්ම මැප් එකෙන් ගත්ත coordinates (selectedLocation) Firestore එකට දානවා.
         const docRef = db.collection("Locations").doc(name);
-        const doc = await docRef.get();
-
-        if (doc.exists) {
-            // නගරය දැනටමත් තියෙනවා නම් alert එකක් දීලා නතර කරනවා
-            return alert("This city is already added!");
-        }
-
-        // 2. නැත්නම් විතරක් අලුතින් ඇඩ් කරනවා
+        
         await docRef.set({
             name: name,
+            lng: selectedLocation.lng, // හරියටම මැප් එකේ ක්ලික් කරපු තැන
+            lat: selectedLocation.lat, // හරියටම මැප් එකේ ක්ලික් කරපු තැන
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        alert(name + " added successfully!");
+        alert(name + " added with exact map coordinates!");
+
+        // 4. සේව් වුණාට පස්සේ form එක සහ මැප් එකේ මාකර් එක clear කරනවා
         input.value = "";
+        if (locMarker) locMarker.remove();
+        selectedLocation = null;
 
     } catch (err) {
-        console.error("Error checking/adding city: ", err);
         alert("Error: " + err.message);
     }
 }
 
-// නගරයක් මකා දැමීම
-function deleteCity(id) {
-    if (confirm("Delete this city?")) {
-        db.collection("Cities").doc(id).delete();
+function deleteLocation(id) {
+    if(confirm("Are you sure you want to delete this city?")) {
+        db.collection("Locations").doc(id).delete();
     }
 }
 
-// Schedule එකක් Publish කිරීම
-document.getElementById("scheduleForm")?.addEventListener("submit", function(e) {
-    e.preventDefault();
-    
-    const scheduleData = {
-        busNo: document.getElementById("busNo").value,
-        phone: document.getElementById("phone").value,
-        fromCity: document.getElementById("fromCity").value,
-        toCity: document.getElementById("toCity").value,
-        price: parseFloat(document.getElementById("price").value),
-        departure: document.getElementById("depTime").value,
-        scheduleType: document.getElementById("scheduleType").value,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
+function renderCitySelects(snapshot) {
+    const fromCity = document.getElementById("fromCity");
+    const toCity = document.getElementById("toCity");
+    if (!fromCity || !toCity) return;
 
-    db.collection("Schedules").add(scheduleData)
-        .then(() => {
-            alert("Schedule Published Successfully!");
-            this.reset();
-            showSection('overview');
-        })
-        .catch(err => alert("Error: " + err));
-});
-
-// ------------------------- UI NAVIGATION -------------------------
-
-function showSection(sectionId) {
-    document.querySelectorAll('section').forEach(sec => sec.style.display = 'none');
-    document.getElementById(`${sectionId}-section`).style.display = 'block';
-    
-    document.querySelectorAll('.sidebar .nav-link').forEach(link => link.classList.remove('active'));
-    document.querySelector(`[data-section="${sectionId}"]`).classList.add('active');
+    let options = '<option value="">Select City</option>';
+    snapshot.forEach(doc => {
+        options += `<option value="${doc.id}">${doc.id}</option>`;
+    });
+    fromCity.innerHTML = options;
+    toCity.innerHTML = options;
 }
 
-document.querySelectorAll('.sidebar .nav-link').forEach(link => {
-    link.addEventListener('click', (e) => {
-        showSection(link.getAttribute('data-section'));
-    });
-});
 
-// Page එක Load වෙද්දී වැඩ පටන් ගන්න
-window.onload = () => {
-    loadDashboardStats();
-    listenToCities();
-    // Chart එකත් මෙතනම Init කරන්න පුළුවන්
-};
-
-function fetchUsers() {
-    const tbody = document.getElementById("usersTableBody");
-    if (!tbody) return;
-
-    // "Users" collection එකට real-time සවන් දීම
-    db.collection("Users").onSnapshot((querySnapshot) => {
-        tbody.innerHTML = ""; // Table එක clear කරනවා
-        
-        // Dashboard එකේ Total Users count එක update කිරීම
-        const userCountElement = document.getElementById("totalUsersCount");
-        if (userCountElement) {
-            userCountElement.innerText = querySnapshot.size;
-        }
-
-        querySnapshot.forEach((doc) => {
-            const user = doc.data();
-            const userId = doc.id;
-            const name = user.name || "Booky User";
-            const email = user.email || "—";
-            // Screenshot එකේ තියෙන්නේ 'phone', 'mobile' නෙවෙයි
-            const phone = user.phone || "—"; 
-
-            // Login Method එක සහ Badge එක තීරණය කිරීම ( screenshots මත පදනම්ව)
-            let loginMethodBadge = '';
-            
-            // ක්‍රමය 1: 'method' field එක හරහා Google අඳුනා ගැනීම
-            if (user.method === "google") {
-                loginMethodBadge = `<span class="badge bg-light text-primary border"><i class="fab fa-google me-1"></i> Google</span>`;
-            } 
-            // ක්‍රමය 2: 'phone' field එක තිබේ නම් එය Mobile User කෙනෙකි
-            else if (phone !== "—") {
-                loginMethodBadge = `<span class="badge bg-light text-success border"><i class="fas fa-phone-alt me-1"></i> Mobile</span>`;
-            } 
-            // එසේ නොමැති නම් (උදාහරණයක් ලෙස පැරණි දත්ත හෝ වෙනත් ක්‍රම)
-            else {
-                loginMethodBadge = `<span class="badge bg-light text-secondary border">Other</span>`;
-            }
-
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td><small class="text-muted">${userId.substring(0, 6)}...</small></td>
-                <td>
-                    <div class="d-flex align-items-center">
-                        <div class="avatar-sm me-2 rounded-circle d-flex align-items-center justify-content-center" style="width:36px; height:36px; background: #f0f2f5;">
-                            <i class="fas fa-user text-secondary"></i>
-                        </div>
-                        <div>
-                            <span class="fw-semibold">${name}</span>
-                        </div>
-                    </div>
-                </td>
-                <td><small>${email}</small></td>
-                <td>
-                    ${loginMethodBadge}
-                    ${phone !== "—" ? `<br><span class="small fw-bold text-success">${phone}</span>` : ''}
-                </td>
-                <td>
-                    <button class="btn btn-sm btn-outline-danger border-0" onclick="deleteUser('${userId}')" title="Delete User">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }, (error) => {
-        console.error("Error fetching users: ", error);
-    });
-}
-
-// App එක පටන් ගන්න කොටම function එක call කරනවා
-fetchUsers();
-
-
-// 1. Dropdown එකට බස් අංක ටික ලෝඩ් කිරීම
+// ------------------------- BOOKINGS (FILTERED) -------------------------
 function loadBusListForFilter() {
     const busFilter = document.getElementById("busFilter");
-    
-    // Schedules collection එකෙන් දැනට තියෙන බස් අංක ටික විතරක් ගන්නවා
-    db.collection("Schedules").onSnapshot((querySnapshot) => {
-        // පරණ ලිස්ට් එක clear කරලා මුල් option එක තියනවා
+    if (!busFilter) return;
+
+    db.collection("Bookings").onSnapshot((querySnapshot) => {
         busFilter.innerHTML = '<option value="">All Buses (Select to Filter)</option>';
-        
-        let busNumbers = [];
+        let busNumbers = new Set();
         querySnapshot.forEach((doc) => {
-            const busNo = doc.data().busNo;
-            if (busNo && !busNumbers.includes(busNo)) {
-                busNumbers.push(busNo);
-                const option = `<option value="${busNo}">${busNo}</option>`;
-                busFilter.innerHTML += option;
-            }
+            const bookingData = doc.data();
+            if (bookingData.busNo) busNumbers.add(bookingData.busNo);
+        });
+
+        busNumbers.forEach((busNo) => {
+            const option = document.createElement("option");
+            option.value = busNo;
+            option.textContent = busNo;
+            busFilter.appendChild(option);
         });
     });
 }
 
-// 2. තෝරාගත් බස් එකට අනුව Bookings Filter කිරීම
 function fetchFilteredBookings() {
-    const selectedBus = document.getElementById("busFilter").value;
+    const busFilterElement = document.getElementById("busFilter");
+    const dateFilterElement = document.getElementById("dateFilter");
     const tbody = document.getElementById("bookingsTableBody");
-    
+
+    if (!tbody) return;
+
+    const selectedBus = busFilterElement.value;
+    const rawDate = dateFilterElement.value; 
+
     let query = db.collection("Bookings");
 
-    // බස් එකක් සිලෙක්ට් කරලා නම් විතරක් query එක filter කරනවා
     if (selectedBus !== "") {
         query = query.where("busNo", "==", selectedBus);
     }
 
+    if (rawDate !== "") {
+        const dateObj = new Date(rawDate);
+        const day = dateObj.getDate();
+        const month = dateObj.toLocaleString('en-GB', { month: 'short' });
+        const year = dateObj.getFullYear();
+        const formattedDate = `${day} ${month} ${year}`;
+        query = query.where("date", "==", formattedDate);
+    }
+
     query.onSnapshot((querySnapshot) => {
         tbody.innerHTML = "";
-        
-        // Dashboard එකේ count එකටත් මේකම පාවිච්චි කරන්න පුළුවන්
-        if (document.getElementById("totalBookingsCount") && selectedBus === "") {
-            document.getElementById("totalBookingsCount").innerText = querySnapshot.size;
+
+        if (querySnapshot.empty) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted">
+                <i class="fas fa-search d-block mb-2 fs-3"></i>
+                No bookings found for <b>${selectedBus || 'this bus'}</b> on <b>${rawDate || 'this date'}</b>.
+            </td></tr>`;
+            return;
         }
+
+        const now = new Date();
 
         querySnapshot.forEach((doc) => {
             const booking = doc.data();
-            const tr = document.createElement("tr");
+            const seatsList = booking.seats ? booking.seats.join(", ") : "N/A";
             
+            // Check if bus departure time has passed
+            const bookingDateTime = new Date(`${booking.date} ${booking.time}`);
+            const isExpired = now > bookingDateTime;
+
+            const tr = document.createElement("tr");
+            if (isExpired) tr.style.opacity = "0.6";
+
             tr.innerHTML = `
-                <td><small class="text-muted">${doc.id.substring(0, 8)}</small></td>
+                <td><small class="text-muted fw-bold">#${doc.id.substring(0,8)}</small></td>
                 <td>
-                    <span class="fw-bold">${booking.passengerName || 'N/A'}</span><br>
-                    <small class="text-muted">${booking.passengerPhone || ''}</small>
+                    <div class="fw-semibold" style="font-size: 0.85rem;">${booking.email || "Guest"}</div>
                 </td>
-                <td><span class="badge-modern">${booking.busNo}</span></td>
-                <td><small>${booking.fromCity} ➔ ${booking.toCity}</small></td>
-                <td>${booking.selectedSeats ? booking.selectedSeats.length : 0} Seats</td>
-                <td class="fw-bold text-teal">Rs. ${booking.totalPrice || 0}</td>
+                <td>
+                    <span class="badge bg-light text-dark border">
+                        <i class="fas fa-bus me-1"></i> ${booking.busNo}
+                    </span>
+                </td>
+                <td>
+                    <div class="fw-medium" style="font-size: 0.85rem;">${booking.fromLocation} ➔ ${booking.toLocation}</div>
+                    <div class="text-teal small mt-1">
+                        <i class="fas fa-map-marker-alt me-1"></i> <b>Pickup:</b> ${booking.pickup || "Not specified"}
+                    </div>
+                    <div class="text-muted small" style="font-size: 0.75rem;">${booking.date} | ${booking.time} ${isExpired ? '<span class="text-danger fw-bold">(Passed)</span>' : ''}</div>
+                </td>
+                <td>
+                    <div class="badge bg-light border" style="font-size: 0.75rem; color: #000;">
+                        <strong style="color: #000;">${booking.seats ? booking.seats.length : 0}</strong> Seats: 
+                        <span style="color: #000;">${seatsList}</span>
+                    </div>
+                </td>
+                <td>
+                    <div class="fw-bold text-teal">Rs. ${(booking.totalPrice || 0).toLocaleString()}</div>
+                </td>
+                <td>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-primary border-0" 
+                            onclick="openEditModal('${doc.id}', '${seatsList}', ${booking.totalPrice || 0}, ${booking.seats ? booking.seats.length : 1})" 
+                            title="Edit Seats" ${isExpired ? 'disabled' : ''}>
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger border-0" 
+                            onclick="deleteFullBooking('${doc.id}')" 
+                            title="Delete Booking" ${isExpired ? 'disabled' : ''}>
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
             `;
             tbody.appendChild(tr);
         });
-        
-        if (querySnapshot.empty) {
-            tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted">No bookings found for this selection.</td></tr>`;
-        }
     });
 }
 
-// මුලින්ම ලෝඩ් වෙන්න ඕන දේවල්
-loadBusListForFilter();
-fetchFilteredBookings();
+// ------------------------- USERS -------------------------
+function fetchUsers() {
+    const tbody = document.getElementById("usersTableBody");
+    if (!tbody) return;
+
+    db.collection("Users").onSnapshot((querySnapshot) => {
+        tbody.innerHTML = "";
+        querySnapshot.forEach((doc) => {
+            const user = doc.data();
+            const phone = user.phone || user.mobile || "—";
+            let loginBadge = user.method === 'google' ? 
+                '<span class="badge bg-light text-primary border"><i class="fab fa-google"></i> Google</span>' : 
+                '<span class="badge bg-light text-success border"><i class="fas fa-phone"></i> Mobile</span>';
+
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td><small>${doc.id.substring(0,6)}...</small></td>
+                <td><span class="fw-semibold">${user.name || "User"}</span></td>
+                <td>${user.email || "—"}</td>
+                <td>${loginBadge} <br> <b>${phone}</b></td>
+                <td><button class="btn btn-sm text-danger" onclick="deleteUser('${doc.id}')"><i class="fas fa-trash"></i></button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    });
+}
+
+function deleteUser(id) {
+    if(confirm("Delete user?")) db.collection("Users").doc(id).delete();
+}
+
+// ------------------------- REVENUE CHART -------------------------
+let myChart;
+function loadRevenueChart() {
+    const ctx = document.getElementById('revenueChart');
+    if (!ctx) return;
+
+    db.collection("Bookings").orderBy("date").onSnapshot((querySnapshot) => {
+        const dailyRevenue = {};
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            const date = data.date || "Unknown";
+            const price = data.totalPrice || 0;
+            dailyRevenue[date] = (dailyRevenue[date] || 0) + price;
+        });
+
+        if (myChart) myChart.destroy();
+        myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Object.keys(dailyRevenue),
+                datasets: [{
+                    label: 'Revenue',
+                    data: Object.values(dailyRevenue),
+                    borderColor: '#008080',
+                    tension: 0.4,
+                    fill: true,
+                    backgroundColor: 'rgba(0, 128, 128, 0.1)'
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    });
+}
+
+// ------------------------- NAVIGATION -------------------------
+function showSection(sectionId) {
+    document.querySelectorAll('section').forEach(sec => sec.style.display = 'none');
+    const target = document.getElementById(`${sectionId}-section`);
+    if(target) target.style.display = 'block';
+    
+    document.querySelectorAll('.sidebar .nav-link').forEach(link => link.classList.remove('active'));
+    document.querySelector(`[data-section="${sectionId}"]`)?.classList.add('active');
+
+    // මැප් resize කරන ලොජික් එක මෙතනින් update කරන්න
+    setTimeout(() => {
+        // Manage Locations section එකට ආවොත් mapLocations එක resize කරනවා
+        if (sectionId === 'locations' && mapLocations) {
+            mapLocations.resize();
+            console.log("mapLocations resized");
+        }
+        // Add Schedules section එකට ආවොත් mapSchedules එක resize කරනවා
+        if (sectionId === 'schedules' && mapSchedules) {
+            mapSchedules.resize();
+            console.log("mapSchedules resized");
+        }
+    }, 300);
+
+    // අනිත් data loading ලොජික් ටික
+    if (sectionId === 'bookings') {
+        loadBusListForFilter();
+        fetchFilteredBookings();
+    } else if (sectionId === 'overview') {
+        loadDashboardStats();
+        loadRevenueChart();
+    } else if (sectionId === 'users') {
+        fetchUsers();
+    }
+}
+
+document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+        e.preventDefault();
+        showSection(link.getAttribute('data-section'));
+    });
+});
+
+// ------------------------- INITIAL LOAD -------------------------
+window.onload = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const dateInput = document.getElementById("dateFilter");
+    if(dateInput) dateInput.value = today;
+
+    loadDashboardStats();
+    loadRevenueChart();
+    fetchLocations();
+    loadBusListForFilter();
+    fetchFilteredBookings(); 
+    showSection('overview');
+
+    initMaps();
+};
+
+// ------------------------- HELPER FUNCTIONS -------------------------
+
+function deleteFullBooking(docId) {
+    if (confirm("Are you sure you want to delete this entire booking? This action cannot be undone.")) {
+        db.collection("Bookings").doc(docId).delete()
+            .then(() => alert("Booking deleted successfully."))
+            .catch((error) => alert("Error deleting booking: " + error));
+    }
+}
+
+let tempSelectedSeats = []; // තාවකාලිකව සීට් තියාගන්න array එකක්
+
+function openEditModal(docId, seatsStr, total, count) {
+    document.getElementById("modalDocId").value = docId;
+    document.getElementById("modalCurrentTotal").value = total;
+    document.getElementById("modalCurrentCount").value = count;
+
+    // සීට් ටික array එකකට ගන්නවා
+    tempSelectedSeats = seatsStr.split(',').map(s => s.trim()).filter(s => s !== "");
+    
+    renderSeatSelection(); // සීට් ටික screen එකේ පෙන්වනවා
+
+    editModal = new bootstrap.Modal(document.getElementById('editSeatsModal'));
+    editModal.show();
+}
+
+function renderSeatSelection() {
+    const container = document.getElementById("seatContainer");
+    const countDisplay = document.getElementById("selectedCountDisplay");
+    const totalDisplay = document.getElementById("newTotalDisplay");
+    
+    const currentTotal = parseFloat(document.getElementById("modalCurrentTotal").value);
+    const currentCount = parseInt(document.getElementById("modalCurrentCount").value);
+    const pricePerSeat = currentTotal / currentCount;
+
+    container.innerHTML = ""; // පරණ ඒවා අයින් කරනවා
+
+    tempSelectedSeats.forEach((seat, index) => {
+        const seatBtn = document.createElement("div");
+        seatBtn.className = "btn btn-teal-custom d-flex align-items-center justify-content-center shadow-sm";
+        seatBtn.style.width = "45px";
+        seatBtn.style.height = "45px";
+        seatBtn.style.fontSize = "0.8rem";
+        seatBtn.innerHTML = seat;
+        
+        // සීට් එකක් click කරපුහම ඒක අයින් කරනවා
+        seatBtn.onclick = () => {
+            if(confirm(`Do you want to remove seat ${seat}?`)) {
+                tempSelectedSeats.splice(index, 1);
+                renderSeatSelection(); // ආයෙත් පෙන්වනවා update කරලා
+            }
+        };
+        container.appendChild(seatBtn);
+    });
+
+    // Update displays
+    countDisplay.innerText = tempSelectedSeats.length;
+    totalDisplay.innerText = (pricePerSeat * tempSelectedSeats.length).toLocaleString();
+}
+
+async function saveSeatChanges() {
+    const docId = document.getElementById("modalDocId").value;
+    const currentTotal = parseFloat(document.getElementById("modalCurrentTotal").value);
+    const currentCount = parseInt(document.getElementById("modalCurrentCount").value);
+
+    if (tempSelectedSeats.length === 0) {
+        alert("At least one seat must be selected. If you want to cancel everything, use Delete.");
+        return;
+    }
+
+    const pricePerSeat = currentTotal / currentCount;
+    const newTotal = pricePerSeat * tempSelectedSeats.length;
+
+    try {
+        await db.collection("Bookings").doc(docId).update({
+            seats: tempSelectedSeats,
+            totalPrice: newTotal
+        });
+        editModal.hide();
+        alert("Booking updated successfully!");
+    } catch (err) {
+        alert("Error: " + err.message);
+    }
+}
+
+
+
+
+
+
+
+
+// Mapbox Access Token (ඔයාගේ Mapbox Dashboard එකෙන් Token එක මෙතනට දාන්න)
+mapboxgl.accessToken = 'pk.eyJ1IjoicHJhbW9kOTE4NCIsImEiOiJjbW12eXF4YnIwbWdhMnNwejVweGQ1ODR5In0.VypLwtDMmky5fa7kKF4Hyg';
+
+let mapLocations, mapSchedules; // මැප් දෙක සඳහා variables
+let locMarker = null; // Manage Cities මැප් එකේ marker එක
+let routeMarkers = []; // Add Schedule මැප් එකේ markers (පාර අඳින)
+let selectedLocation = null;
+
+
+// Map එක Initialize කිරීම
+function initMaps() {
+    // 1. Manage Cities Map
+    mapLocations = new mapboxgl.Map({
+        container: 'map-locations', // HTML එකේ ID එක
+        style: 'mapbox://styles/mapbox/streets-v12',
+        center: [80.7718, 7.8731],
+        zoom: 7
+    });
+
+    // 2. Add Schedules Map
+    mapSchedules = new mapboxgl.Map({
+        container: 'map-schedules', // දෙවැනි මැප් එකේ ID එක
+        style: 'mapbox://styles/mapbox/streets-v12',
+        center: [80.7718, 7.8731],
+        zoom: 7
+    });
+
+    // නගර තෝරන ලොජික් එක mapLocations එකට විතරක් දාන්න
+    // මේ කොටස initMaps() ඇතුළේ තියෙන්න ඕනේ
+mapLocations.on('click', (e) => {
+    // Click කරපු තැන longitude සහ latitude ගන්නවා
+    selectedLocation = e.lngLat; 
+
+    // කලින් තිබ්බ මාකර් එක අයින් කරලා අලුත් එකක් දානවා
+    if (locMarker) locMarker.remove();
+    locMarker = new mapboxgl.Marker({ color: '#008080' })
+        .setLngLat(selectedLocation)
+        .addTo(mapLocations);
+
+    console.log("Selected Coords:", selectedLocation.lng, selectedLocation.lat);
+});
+}
+
+// City දෙක අතර Route එක ඇඳීම
+async function updateMapRoute() {
+    const fromCityId = document.getElementById("fromCity").value;
+    const toCityId = document.getElementById("toCity").value;
+
+    if (!fromCityId || !toCityId) return;
+
+    // පරණ markers සහ route මැප් එකෙන් අයින් කරනවා
+    routeMarkers.forEach(m => m.remove());
+    routeMarkers = [];
+    if (mapSchedules.getLayer('route')) mapSchedules.removeLayer('route');
+    if (mapSchedules.getSource('route')) mapSchedules.removeSource('route');
+
+    async function getFirestoreCoords(cityId) {
+        try {
+            const doc = await db.collection("Locations").doc(cityId).get();
+            if (doc.exists) {
+                const data = doc.data();
+                // Mapbox වලට longitude මුලට එන්න ඕනේ: [lng, lat]
+                return [data.lng, data.lat]; 
+            }
+            return null;
+        } catch (err) { return null; }
+    }
+
+    const start = await getFirestoreCoords(fromCityId);
+    const end = await getFirestoreCoords(toCityId);
+
+    if (start && end) {
+        // 1. මැප් එකේ Start/End Markers දානවා
+        routeMarkers.push(new mapboxgl.Marker({ color: '#2ecc71' }).setLngLat(start).addTo(mapSchedules));
+        routeMarkers.push(new mapboxgl.Marker({ color: '#e74c3c' }).setLngLat(end).addTo(mapSchedules));
+
+        // 2. පාර (Route) ඇඳීමට Directions API එකට කෝල් කරනවා
+        const routeUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?geometries=geojson&access_token=${mapboxgl.accessToken}`;
+        
+        try {
+            const response = await fetch(routeUrl);
+            const routeData = await response.json();
+
+            if (routeData.routes && routeData.routes.length > 0) {
+                const geometry = routeData.routes[0].geometry;
+
+                // 3. පාරේ හැඩය (Line) මැප් එකට ඇඩ් කරනවා
+                mapSchedules.addSource('route', {
+                    'type': 'geojson',
+                    'data': {
+                        'type': 'Feature',
+                        'properties': {},
+                        'geometry': geometry
+                    }
+                });
+
+                mapSchedules.addLayer({
+                    'id': 'route',
+                    'type': 'line',
+                    'source': 'route',
+                    'layout': { 'line-join': 'round', 'line-cap': 'round' },
+                    'paint': { 
+                        'line-color': '#008080', // තද කොළ පාටට හුරු පාරක්
+                        'line-width': 5,
+                        'line-opacity': 0.75
+                    }
+                });
+
+                // 4. නගර දෙකම පේන විදිහට මැප් එක Zoom කරනවා
+                const bounds = new mapboxgl.LngLatBounds().extend(start).extend(end);
+                mapSchedules.fitBounds(bounds, { padding: 80, duration: 1500 });
+            }
+        } catch (err) {
+            console.error("Directions API Error:", err);
+        }
+    }
+}
+
+// Select boxes වලට listener එකතු කිරීම
+document.getElementById("fromCity")?.addEventListener("change", updateMapRoute);
+document.getElementById("toCity")?.addEventListener("change", updateMapRoute);
+
+// ------------------------- SCHEDULE PUBLISH (DAILY RECURRENCE) -------------------------
+// ------------------------- UI LOGIC: SHOW/HIDE DATE BASED ON TYPE -------------------------
+
+// Schedule Type එක අනුව Input එක පාලනය කිරීම
+document.getElementById("scheduleType")?.addEventListener("change", function() {
+    const depTimeInput = document.getElementById("depTime");
+    
+    if (this.value === "daily") {
+        // Daily නම් වෙලාව විතරක් select කරන්න දෙනවා (Time Picker)
+        depTimeInput.type = "time";
+    } else {
+        // One-time නම් Date සහ Time දෙකම select කරන්න දෙනවා (DateTime Picker)
+        depTimeInput.type = "datetime-local";
+    }
+});
+
+// ------------------------- SCHEDULE PUBLISH LOGIC (FINAL) -------------------------
+
+// ------------------------- SCHEDULE PUBLISH LOGIC (FINAL & CORRECTED) -------------------------
+
+document.getElementById("scheduleForm")?.addEventListener("submit", async function(e) {
+    e.preventDefault();
+    
+    const btn = e.target.querySelector('button');
+    const fromCityId = document.getElementById("fromCity").value;
+    const toCityId = document.getElementById("toCity").value;
+    const scheduleType = document.getElementById("scheduleType").value;
+    const timeValue = document.getElementById("depTime").value; 
+
+    if (!timeValue) return alert("Please enter the departure details!");
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Publishing...';
+
+    try {
+        // 1. නගර දෙකේ Coordinates Firestore එකෙන් ලබා ගැනීම
+        const fromDoc = await db.collection("Locations").doc(fromCityId).get();
+        const toDoc = await db.collection("Locations").doc(toCityId).get();
+
+        if (!fromDoc.exists || !toDoc.exists) {
+            throw new Error("Coordinates for selected cities not found!");
+        }
+
+        const fromData = fromDoc.data();
+        const toData = toDoc.data();
+        
+        // Route ID එකක් සෑදීම (උදා: COL-KAN)
+        const route_id = `${fromCityId.substring(0, 3).toUpperCase()}-${toCityId.substring(0, 3).toUpperCase()}`;
+
+        let batch = db.batch();
+        // Daily නම් ඉදිරි දින 30 කට, One-time නම් 1 දිනකට පමණි
+        let iterations = scheduleType === 'daily' ? 30 : 1;
+        let today = new Date();
+
+        for (let i = 0; i < iterations; i++) {
+            let targetDate = new Date();
+            
+            if (scheduleType === 'daily') {
+                targetDate.setDate(today.getDate() + i);
+                const [hours, minutes] = timeValue.split(':');
+                targetDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+            } else {
+                // One-time නම් user තේරූ specific date/time එකම ගන්නවා
+                targetDate = new Date(timeValue);
+            }
+
+            const scheduleRef = db.collection("Schedules").doc();
+            
+            // --- ඔයාගේ APP එකට අවශ්‍ය නිවැරදි FIELD NAMES මෙන්න ---
+            batch.set(scheduleRef, {
+                bus_no: document.getElementById("busNo").value,         // Screenshot එකේ තිබූ පරිදි
+                phone_number: document.getElementById("phone").value,   // Screenshot එකේ තිබූ පරිදි
+                from: fromCityId,                                       // Screenshot එකේ තිබූ පරිදි
+                to: toCityId,                                           // Screenshot එකේ තිබූ පරිදි
+                price: parseFloat(document.getElementById("price").value),
+                route_id: route_id,                                     // Screenshot එකේ තිබූ පරිදි
+                departure_time: firebase.firestore.Timestamp.fromDate(targetDate), // App එකේ sorting වලට අත්‍යවශ්‍යයි
+                
+                // අමතර දත්ත (Map එක ඇඳීමට සහ පාලනයට)
+                from_lat: fromData.lat,
+                from_lng: fromData.lng,
+                to_lat: toData.lat,
+                to_lng: toData.lng,
+                schedule_type: scheduleType,
+                pickup_points: [fromCityId.toLowerCase()], // Default එකක් ලෙස
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+
+        await batch.commit();
+        alert(`Successfully published ${iterations} schedule(s)!`);
+        
+        this.reset();
+        
+        // Map elements clear කිරීම
+        if (typeof routeMarkers !== 'undefined') {
+            routeMarkers.forEach(m => m.remove());
+            routeMarkers = [];
+        }
+        if (mapSchedules.getLayer('route')) mapSchedules.removeLayer('route');
+        if (mapSchedules.getSource('route')) mapSchedules.removeSource('route');
+        
+        showSection('overview');
+
+    } catch (err) {
+        console.error("Publishing Error:", err);
+        alert("Error: " + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-plus-circle me-2"></i> Publish Schedule';
+    }
+});
+
+// Map එක load කරන්න අමතක කරන්න එපා
+window.addEventListener('load', initMap);
