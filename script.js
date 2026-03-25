@@ -2,20 +2,6 @@
 mapboxgl.accessToken = 'pk.eyJ1IjoicHJhbW9kOTE4NCIsImEiOiJjbW12eXF4YnIwbWdhMnNwejVweGQ1ODR5In0.VypLwtDMmky5fa7kKF4Hyg'; 
 // Firebase Configuration
 
-const firebaseConfig = {
-  apiKey: "AIzaSyB26tawJ3La7cSldcfP6ldyfZNf2HdFafc",
-  authDomain: "bookyapp-bef0e.firebaseapp.com",
-  databaseURL: "https://bookyapp-bef0e-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "bookyapp-bef0e",
-  storageBucket: "bookyapp-bef0e.firebasestorage.app",
-  messagingSenderId: "145154911764",
-  appId: "1:145154911764:web:2be47f7c68f39d85df4101",
-  measurementId: "G-4GH90XM7P7"
-};
-
-// Firebase Initialize
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
 
 // Global modal instance
 let editModal;
@@ -376,6 +362,14 @@ document.querySelectorAll('.sidebar .nav-link').forEach(link => {
 
 // ------------------------- INITIAL LOAD -------------------------
 window.onload = () => {
+    // 1. SECURITY CHECK: ලොගින් වෙලා නැත්නම් Dashboard එක පෙන්වන්නේ නැහැ
+    const isLoggedIn = localStorage.getItem("adminLoggedIn");
+    if (isLoggedIn !== "true") {
+        window.location.href = "login.html"; 
+        return; // මෙතනින් පල්ලෙහා තියෙන දේවල් run වෙන්නේ නැහැ
+    }
+
+    // 2. ලොගින් වෙලා ඉන්නවා නම් විතරක් මේ ටික run වෙනවා
     const today = new Date().toISOString().split('T')[0];
     const dateInput = document.getElementById("dateFilter");
     if(dateInput) dateInput.value = today;
@@ -389,7 +383,6 @@ window.onload = () => {
 
     initMaps();
 };
-
 // ------------------------- HELPER FUNCTIONS -------------------------
 
 function deleteFullBooking(docId) {
@@ -851,5 +844,67 @@ function deleteSchedule(id) {
         db.collection("Schedules").doc(id).delete()
             .then(() => alert("Schedule deleted!"))
             .catch((error) => console.error("Error: ", error));
+    }
+}
+
+
+
+// ඔයාගේ script.js එකේ අන්තිමට දාන්න
+
+// ------------------------- ADMIN LOGIN LOGIC (NEW) -------------------------
+
+async function loginAdmin(event) {
+    // 1. Form එක submit වෙද්දී page එක reload වෙන එක නවත්වනවා
+    if (event) event.preventDefault(); 
+
+    const emailInput = document.getElementById("loginEmail");
+    const passwordInput = document.getElementById("loginPassword");
+    const submitBtn = event.target.querySelector('button');
+
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+
+    if (!email || !password) {
+        alert("Please fill all fields!");
+        return;
+    }
+
+    // 2. Loading status එක පෙන්වනවා
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Authenticating...';
+
+    try {
+        // 3. Firestore එකේ Admin collection එකේ email එකට අදාළ document එක හොයනවා
+        // (අනිවාර්යයෙන්ම Firestore එකේ Document ID එක admin email එක විදියට හදන්න)
+        const adminRef = db.collection("Admin").doc(email);
+        const doc = await adminRef.get();
+
+        if (doc.exists) {
+            const adminData = doc.data();
+            
+            // 4. Password එක check කරනවා
+            if (adminData.password === password) {
+                console.log("Login Successful!");
+                
+                // 5. සෙෂන් එකක් විදියට තියාගන්න (LocalStorage)
+                localStorage.setItem("adminLoggedIn", "true");
+                localStorage.setItem("adminEmail", email);
+                
+                // 6. Dashboard එකට යවනවා
+                window.location.href = "index.html"; 
+            } else {
+                alert("Invalid Password!");
+                passwordInput.value = ""; // පරණ password එක clear කරනවා
+            }
+        } else {
+            alert("Admin email not found!");
+        }
+    } catch (error) {
+        console.error("Login Error: ", error);
+        alert("Something went wrong! " + error.message);
+    } finally {
+        // 7. Reset button status
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-sign-in-alt me-1"></i> Sign In to Dashboard';
     }
 }
