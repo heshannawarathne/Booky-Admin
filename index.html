@@ -359,7 +359,7 @@
 
     <section id="schedules-section" style="display:none;">
         <h2><i class="fas fa-bus me-2"></i>Bus Scheduling</h2>
-        <div class="card border-0 shadow-sm rounded-4 p-4">
+        <div class="card border-0 shadow-sm rounded-4 p-4 mb-5">
             <form id="scheduleForm">
                 <div class="row g-4">
                     <div class="col-md-6"><label class="form-label fw-semibold">Bus Number</label><input type="text" id="busNo" class="form-control form-modern" required></div>
@@ -370,14 +370,36 @@
                     <div class="col-md-6" id="depTimeContainer"><label class="form-label fw-semibold">Departure Time</label><input type="datetime-local" id="depTime" class="form-control form-modern" required></div>
                     <div class="col-md-6"><label class="form-label fw-semibold">Recurrence</label><select id="scheduleType" class="form-select form-modern"><option value="single">Single (One Time)</option><option value="daily">Daily</option></select></div>
                 </div>
-<div class="mt-4">
-    <label class="form-label fw-semibold">Route Preview (Map)</label>
-    <div id="map-schedules" style="height: 400px; width: 100%; border-radius: 20px; overflow: hidden; box-shadow: var(--shadow-sm);"></div>
-</div>
+                <div class="mt-4">
+                    <label class="form-label fw-semibold">Route Preview (Map)</label>
+                    <div id="map-schedules" style="height: 300px; width: 100%; border-radius: 20px; overflow: hidden; box-shadow: var(--shadow-sm);"></div>
+                </div>
                 <button type="submit" class="btn btn-teal-custom w-100 mt-4 py-3"><i class="fas fa-plus-circle me-2"></i> Publish Schedule</button>
             </form>
         </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-3 mt-4 flex-wrap">
+            <h4 class="fw-bold text-teal"><i class="fas fa-list-ul me-2"></i>Active Schedules</h4>
+            <div class="d-flex gap-2 flex-wrap bg-white p-2 rounded-4 shadow-sm border">
+                <input type="date" id="schedDateFilter" class="form-control form-modern py-1" style="width: 150px;" onchange="fetchSchedules()">
+                <select id="schedFromFilter" class="form-select form-modern py-1" style="width: 140px;" onchange="fetchSchedules()"><option value="">From All</option></select>
+                <select id="schedToFilter" class="form-select form-modern py-1" style="width: 140px;" onchange="fetchSchedules()"><option value="">To All</option></select>
+                <button class="btn btn-light border rounded-pill px-3" onclick="clearSchedFilters()"><i class="fas fa-sync-alt"></i></button>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-4 p-0 overflow-hidden">
+            <div class="table-responsive">
+                <table class="modern-table mb-0">
+                    <thead>
+                        <tr><th>Date & Time</th><th>Route</th><th>Bus No</th><th>Price</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody id="schedulesTableBody"></tbody>
+                </table>
+            </div>
+        </div>
     </section>
+    
 
     <section id="bookings-section" style="display:none;">
         <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">

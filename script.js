@@ -359,6 +359,11 @@ function showSection(sectionId) {
         loadRevenueChart();
     } else if (sectionId === 'users') {
         fetchUsers();
+    }else if (sectionId === 'locations') {
+        fetchLocations(); 
+    }else if (sectionId === 'schedules') {
+        fetchLocations();
+        fetchSchedules(); 
     }
 }
 
@@ -619,6 +624,8 @@ document.getElementById("scheduleType")?.addEventListener("change", function() {
 
 // ------------------------- SCHEDULE PUBLISH LOGIC (FINAL & CORRECTED) -------------------------
 
+// ------------------------- SCHEDULE PUBLISH LOGIC (FINAL & CORRECTED) -------------------------
+
 document.getElementById("scheduleForm")?.addEventListener("submit", async function(e) {
     e.preventDefault();
     
@@ -627,6 +634,9 @@ document.getElementById("scheduleForm")?.addEventListener("submit", async functi
     const toCityId = document.getElementById("toCity").value;
     const scheduleType = document.getElementById("scheduleType").value;
     const timeValue = document.getElementById("depTime").value; 
+    const busNo = document.getElementById("busNo").value;
+    const phone = document.getElementById("phone").value;
+    const price = parseFloat(document.getElementById("price").value);
 
     if (!timeValue) return alert("Please enter the departure details!");
 
@@ -638,52 +648,56 @@ document.getElementById("scheduleForm")?.addEventListener("submit", async functi
         const fromDoc = await db.collection("Locations").doc(fromCityId).get();
         const toDoc = await db.collection("Locations").doc(toCityId).get();
 
-        if (!fromDoc.exists || !toDoc.exists) {
-            throw new Error("Coordinates for selected cities not found!");
-        }
+        if (!fromDoc.exists || !toDoc.exists) throw new Error("Location coordinates missing!");
 
         const fromData = fromDoc.data();
         const toData = toDoc.data();
-        
-        // Route ID එකක් සෑදීම (උදා: COL-KAN)
         const route_id = `${fromCityId.substring(0, 3).toUpperCase()}-${toCityId.substring(0, 3).toUpperCase()}`;
 
         let batch = db.batch();
-        // Daily නම් ඉදිරි දින 30 කට, One-time නම් 1 දිනකට පමණි
         let iterations = scheduleType === 'daily' ? 30 : 1;
-        let today = new Date();
+
+        // --- පටන් ගන්න දවස සෙට් කිරීම (හෙට සිට) ---
+        let baseDate = new Date();
+        baseDate.setDate(baseDate.getDate() + 1); // අදට වඩා 1ක් එකතු කර හෙට දවස ගන්නවා
 
         for (let i = 0; i < iterations; i++) {
-            let targetDate = new Date();
+            let targetDate = new Date(baseDate);
             
+            // i=0 වෙද්දී හෙට, i=1 වෙද්දී අනිද්දා... 
+            // මෙතනදී targetDate.getDate() + i කිරීමෙන් මාස මාරු වීම auto සිදු වේ.
+            targetDate.setDate(baseDate.getDate() + i);
+
             if (scheduleType === 'daily') {
-                targetDate.setDate(today.getDate() + i);
                 const [hours, minutes] = timeValue.split(':');
                 targetDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
             } else {
-                // One-time නම් user තේරූ specific date/time එකම ගන්නවා
+                // One-time නම් user තේරූ specific datetime එකම ගන්නවා
                 targetDate = new Date(timeValue);
             }
 
-            const scheduleRef = db.collection("Schedules").doc();
+            // Screenshot එකේ තිබූ පරිදි Document ID එක සෑදීම
+            const dateStr = targetDate.toISOString().split('T')[0];
+            const randomId = Math.floor(100 + Math.random() * 900);
+            const docId = `${route_id}-${dateStr}-${randomId}`;
+
+            const scheduleRef = db.collection("Schedules").doc(docId);
             
-            // --- ඔයාගේ APP එකට අවශ්‍ය නිවැරදි FIELD NAMES මෙන්න ---
+            // Screenshot එකේ තිබූ හරියටම Field Names මෙන්න:
             batch.set(scheduleRef, {
-                bus_no: document.getElementById("busNo").value,         // Screenshot එකේ තිබූ පරිදි
-                phone_number: document.getElementById("phone").value,   // Screenshot එකේ තිබූ පරිදි
-                from: fromCityId,                                       // Screenshot එකේ තිබූ පරිදි
-                to: toCityId,                                           // Screenshot එකේ තිබූ පරිදි
-                price: parseFloat(document.getElementById("price").value),
-                route_id: route_id,                                     // Screenshot එකේ තිබූ පරිදි
-                departure_time: firebase.firestore.Timestamp.fromDate(targetDate), // App එකේ sorting වලට අත්‍යවශ්‍යයි
-                
-                // අමතර දත්ත (Map එක ඇඳීමට සහ පාලනයට)
+                departure_time: firebase.firestore.Timestamp.fromDate(targetDate),
+                from: fromCityId,
                 from_lat: fromData.lat,
                 from_lng: fromData.lng,
+                phone_number: phone,
+                pickup_points: [fromCityId.toLowerCase()],
+                price: price,
+                route_id: route_id,
+                schedule_type: scheduleType,
+                to: toCityId,
                 to_lat: toData.lat,
                 to_lng: toData.lng,
-                schedule_type: scheduleType,
-                pickup_points: [fromCityId.toLowerCase()], // Default එකක් ලෙස
+                bus_no: busNo, // පසුව filter කිරීමට පහසු වීමට
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
         }
@@ -712,5 +726,130 @@ document.getElementById("scheduleForm")?.addEventListener("submit", async functi
     }
 });
 
+
 // Map එක load කරන්න අමතක කරන්න එපා
 window.addEventListener('load', initMap);
+
+
+// 1. නගර ටික Load කරන කොට Filter dropdowns දෙකටත් ඒවා දාන්න
+function fetchLocations() {
+    const tbody = document.getElementById("locationTableBody");
+    const fromCity = document.getElementById("fromCity");
+    const toCity = document.getElementById("toCity");
+    const schedFromFilter = document.getElementById("schedFromFilter");
+    const schedToFilter = document.getElementById("schedToFilter");
+
+    db.collection("Locations").onSnapshot((snapshot) => {
+        let options = '<option value="">Select City</option>';
+        let filterOptions = '<option value="">All Cities</option>';
+        
+        if (tbody) tbody.innerHTML = ""; // Table එක clear කරනවා
+
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const cityName = data.name || doc.id;
+
+            // 1. Dropdown options හදනවා
+            options += `<option value="${cityName}">${cityName}</option>`;
+            filterOptions += `<option value="${cityName}">${cityName}</option>`;
+
+            // 2. Table එකට Row එකක් ඇඩ් කරනවා (මේ කොටසයි අඩුවෙලා තිබ්බේ)
+            if (tbody) {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${doc.id.substring(0, 5)}...</td> 
+                    <td><i class="fas fa-location-dot me-2 text-teal"></i>${cityName}</td>
+                    <td>
+                        <div class="small text-muted">${data.lat?.toFixed(4)}, ${data.lng?.toFixed(4)}</div>
+                    </td>
+                    <td>
+                        <button class="btn btn-outline-danger btn-sm border-0" onclick="deleteLocation('${doc.id}')">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            }
+        });
+
+        // Dropdowns update කිරීම
+        if (fromCity) fromCity.innerHTML = options;
+        if (toCity) toCity.innerHTML = options;
+        if (schedFromFilter) schedFromFilter.innerHTML = filterOptions;
+        if (schedToFilter) schedToFilter.innerHTML = filterOptions;
+        
+    }, (error) => {
+        console.error("Error fetching locations: ", error);
+    });
+}
+
+// 2. Schedules ටික Filter කරලා අරන් පෙන්වන ප්‍රධාන function එක
+function fetchSchedules() {
+    const tbody = document.getElementById("schedulesTableBody");
+    if (!tbody) return;
+
+    const dateVal = document.getElementById("schedDateFilter").value;
+    const fromVal = document.getElementById("schedFromFilter").value;
+    const toVal = document.getElementById("schedToFilter").value;
+
+    let query = db.collection("Schedules").orderBy("departure_time", "asc");
+
+    // City අනුව Firestore එකෙන්ම filter කරනවා
+    if (fromVal) query = query.where("from", "==", fromVal);
+    if (toVal) query = query.where("to", "==", toVal);
+
+    query.onSnapshot((snapshot) => {
+        tbody.innerHTML = "";
+        
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const depTimestamp = data.departure_time.toDate();
+            
+            // Date එක තෝරලා තියෙනවා නම් ඒක විතරක් පෙන්වන්න (JS filter)
+            if (dateVal) {
+                const selectedDate = new Date(dateVal).toDateString();
+                if (depTimestamp.toDateString() !== selectedDate) return;
+            }
+
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>
+                    <div class="fw-bold text-dark">${depTimestamp.toLocaleDateString('en-GB')}</div>
+                    <div class="small text-muted">${depTimestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </td>
+                <td>
+                    <div class="small fw-semibold text-teal">${data.from} ➔ ${data.to}</div>
+                </td>
+                <td><span class="badge bg-light text-dark border">${data.bus_no}</span></td>
+                <td class="fw-bold">Rs. ${data.price}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger border-0" onclick="deleteSchedule('${doc.id}')">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        if (tbody.innerHTML === "") {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted small">No schedules found.</td></tr>';
+        }
+    });
+}
+
+// 3. Filters Reset කරන function එක
+function clearSchedFilters() {
+    document.getElementById("schedDateFilter").value = "";
+    document.getElementById("schedFromFilter").value = "";
+    document.getElementById("schedToFilter").value = "";
+    fetchSchedules();
+}
+
+// 4. Delete Schedule
+function deleteSchedule(id) {
+    if (confirm("Are you sure you want to delete this schedule?")) {
+        db.collection("Schedules").doc(id).delete()
+            .then(() => alert("Schedule deleted!"))
+            .catch((error) => console.error("Error: ", error));
+    }
+}
