@@ -908,3 +908,131 @@ async function loginAdmin(event) {
         submitBtn.innerHTML = '<i class="fas fa-sign-in-alt me-1"></i> Sign In to Dashboard';
     }
 }
+
+function logoutAdmin() {
+    // 1. Confirm with the user before logging out
+    if (confirm("Are you sure you want to logout from the Dashboard?")) {
+        
+        // 2. Remove the admin login status from Local Storage
+        localStorage.removeItem("adminLoggedIn");
+        
+        // 3. Optional: Clear any other stored admin data
+        localStorage.removeItem("adminEmail");
+
+        // 4. Redirect to the login page
+        window.location.href = "login.html";
+    }
+}
+
+async function loadSchedulesForNotif() {
+    const select = document.getElementById("notifBusId");
+    const filterDate = document.getElementById("notifFilterDate").value;
+    
+    if (!filterDate) return;
+
+    // දවසක් තේරූ සැනින් dropdown එක enable කරලා loading පෙන්වනවා
+    select.disabled = false; 
+    select.innerHTML = '<option value="">Searching trips...</option>';
+    
+    try {
+        const snapshot = await db.collection("Schedules")
+            .where("date", "==", filterDate) 
+            .get();
+
+        if (snapshot.empty) {
+            select.innerHTML = '<option value="">No trips found for this date.</option>';
+            return;
+        }
+
+        select.innerHTML = '<option value="">-- Select Specific Trip --</option>';
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            // Firestore field names: busNo, depTime, fromCity, toCity නිවැරදිද බලන්න
+            const displayText = `${data.busNo} | ${data.depTime} (${data.fromCity} - ${data.toCity})`;
+            select.innerHTML += `<option value="${doc.id}">${displayText}</option>`;
+        });
+    } catch (error) {
+        console.error("Firestore Error:", error);
+        select.innerHTML = '<option value="">Error loading data.</option>';
+    }
+}
+
+function toggleBusSelect() {
+    const target = document.getElementById("notifTarget").value;
+    const busContainer = document.getElementById("busSelectContainer");
+
+    if (target === "targeted") {
+        // "Specific Bus Passengers" තේරුවොත් විතරක් පෙන්වන්න
+        busContainer.style.display = "block";
+    } else {
+        // "All Users" තේරුවොත් හංගන්න
+        busContainer.style.display = "none";
+        
+        // ආපහු reset කරන්න (optional)
+        document.getElementById("notifFilterDate").value = "";
+        document.getElementById("notifBusId").innerHTML = '<option value="">Pick a date first...</option>';
+    }
+}
+
+// Notification එක යවන ප්‍රධාන function එක
+function handleNotificationSend() {
+    const title = document.getElementById("notifTitle").value;
+    const body = document.getElementById("notifBody").value;
+    const target = document.getElementById("notifTarget").value;
+    const scheduleId = document.getElementById("notifScheduleId").value;
+
+    // Validation: Title සහ Body හිස්නම් යවන්න දෙන්න එපා
+    if (!title || !body) {
+        alert("Please enter both Title and Message Body.");
+        return;
+    }
+
+    // Targeted notification එකක් නම් Schedule එකක් තෝරලා තියෙන්නම ඕනේ
+    if (target === "targeted" && !scheduleId) {
+        alert("Please select a specific journey (Date/Bus/Time) to target passengers.");
+        return;
+    }
+
+    // Loading එකක් පෙන්වන්න (User experience එකට හොඳයි)
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Dispatching...';
+
+    // FormData පාවිච්චි කරලා Servlet එකට ඩේටා යවනවා
+    const params = new URLSearchParams();
+    params.append("title", title);
+    params.append("body", body);
+    params.append("target", target);
+    if (target === "targeted") {
+        params.append("scheduleId", scheduleId);
+    }
+
+    // AJAX (Fetch API) එක හරහා Servlet එකට Request එක යැවීම
+    fetch("sendNotification", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: params
+    })
+    .then(response => {
+        if (response.ok) {
+            alert("✅ Notification dispatched successfully!");
+            // Form එක reset කරනවා
+            document.getElementById("notifTitle").value = "";
+            document.getElementById("notifBody").value = "";
+        } else {
+            alert("❌ Failed to send notification. Please check the server logs.");
+        }
+    })
+    .catch(error => {
+        console.error("Error:", error);
+        alert("❌ An error occurred while connecting to the server.");
+    })
+    .finally(() => {
+        // බටන් එක ආපහු normal කරනවා
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    });
+}
