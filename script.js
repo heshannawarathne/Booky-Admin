@@ -1015,26 +1015,20 @@ function toggleBusSelect() {
         }
     }
 }
-// Mobile App Adapter (NotificationModel) එකට 100% Match වෙන Notification Dispatcher
+// Mobile App Schema එකට 100% Match වෙන Notification Dispatcher
 async function handleNotificationSend(e) {
     if (e) e.preventDefault();
 
     const titleInput = document.getElementById("notifTitle");
     const bodyInput = document.getElementById("notifBody");
     const targetSelect = document.getElementById("notifTarget");
-    const busSelect = document.getElementById("notifBusId");
 
     const title = titleInput ? titleInput.value.trim() : "";
     const body = bodyInput ? bodyInput.value.trim() : "";
     const target = targetSelect ? targetSelect.value : "all";
-    const scheduleId = busSelect ? busSelect.value : "";
 
     if (!title || !body) {
         return alert("Please enter both Notification Title and Message Body!");
-    }
-
-    if (target === "targeted" && !scheduleId) {
-        return alert("Please select a specific trip (Date & Bus) to target passengers!");
     }
 
     const btn = document.querySelector("#notifications-section button.btn-teal-custom") || (e && e.target ? e.target : null);
@@ -1046,31 +1040,40 @@ async function handleNotificationSend(e) {
     }
 
     try {
-        // Mobile App NotificationModel එකට අදාළ exact field names
-        const notifData = {
-            title: title,
-            message: body,                            // Mobile App එක බලන්නේ 'message'
-            timestamp: Date.now(),                    // long milliseconds (getTimestamp() සඳහා)
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            target: target
-        };
+        // Registered Users ලා ඔක්කොටම Broadcast කිරීමට Users Collection එකෙන් IDs ලබා ගැනීම
+        const usersSnapshot = await db.collection("Users").get();
 
-        if (target === "targeted") {
-            notifData.scheduleId = scheduleId;
+        if (usersSnapshot.empty) {
+            // Users ලා නැත්නම් Genaral Broadcast එකක් විදිහට Add කිරීම
+            await db.collection("Notifications").add({
+                title: title,
+                message: body,
+                timestamp: Date.now(),
+                isRead: false,
+                userId: "ALL"
+            });
+        } else {
+            // එක් එක් User වෙනුවෙන් Notification Document එකක් Batch Write මගින් Add කිරීම
+            let batch = db.batch();
+
+            usersSnapshot.forEach(userDoc => {
+                const notifRef = db.collection("Notifications").doc();
+                batch.set(notifRef, {
+                    title: title,
+                    message: body,
+                    timestamp: Date.now(),
+                    isRead: false,
+                    userId: userDoc.id // Mobile App එකට අවශ්‍ය userId එක
+                });
+            });
+
+            await batch.commit();
         }
 
-        // Direct Firestore 'Notifications' Collection එකට Save කිරීම
-        await db.collection("Notifications").add(notifData);
+        alert("✅ Notification dispatched to all users successfully!");
 
-        alert("✅ Notification dispatched successfully to Mobile App!");
-
-        // Form reset
         if (titleInput) titleInput.value = "";
         if (bodyInput) bodyInput.value = "";
-        if (targetSelect) {
-            targetSelect.value = "all";
-            toggleBusSelect();
-        }
 
     } catch (error) {
         console.error("Firestore Notification Error:", error);
