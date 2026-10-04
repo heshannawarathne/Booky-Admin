@@ -950,16 +950,24 @@ function logoutAdmin() {
 async function loadSchedulesForNotif() {
     const select = document.getElementById("notifBusId");
     const filterDate = document.getElementById("notifFilterDate").value;
-    
+
     if (!filterDate) return;
 
-    // දවසක් තේරූ සැනින් dropdown එක enable කරලා loading පෙන්වනවා
-    select.disabled = false; 
+    select.disabled = false;
     select.innerHTML = '<option value="">Searching trips...</option>';
-    
+
     try {
+        // තෝරාගත් දවසේ Start සහ End Timestamps සෑදීම
+        const startOfDay = new Date(filterDate);
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const endOfDay = new Date(filterDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        // departure_time range එකෙන් query කිරීම
         const snapshot = await db.collection("Schedules")
-            .where("date", "==", filterDate) 
+            .where("departure_time", ">=", firebase.firestore.Timestamp.fromDate(startOfDay))
+            .where("departure_time", "<=", firebase.firestore.Timestamp.fromDate(endOfDay))
             .get();
 
         if (snapshot.empty) {
@@ -970,8 +978,19 @@ async function loadSchedulesForNotif() {
         select.innerHTML = '<option value="">-- Select Specific Trip --</option>';
         snapshot.forEach(doc => {
             const data = doc.data();
-            // Firestore field names: busNo, depTime, fromCity, toCity නිවැරදිද බලන්න
-            const displayText = `${data.busNo} | ${data.depTime} (${data.fromCity} - ${data.toCity})`;
+
+            // departure_time Timestamp එක Time string එකකට හරවා ගැනීම
+            let depTimeString = "N/A";
+            if (data.departure_time) {
+                depTimeString = data.departure_time.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+
+            // Correct Firestore Field Names (bus_no, from, to)
+            const busNo = data.bus_no || data.busNo || "Bus";
+            const fromCity = data.from || data.fromCity || "";
+            const toCity = data.to || data.toCity || "";
+
+            const displayText = `${busNo} | ${depTimeString} (${fromCity} ➔ ${toCity})`;
             select.innerHTML += `<option value="${doc.id}">${displayText}</option>`;
         });
     } catch (error) {
@@ -985,35 +1004,40 @@ function toggleBusSelect() {
     const busContainer = document.getElementById("busSelectContainer");
 
     if (target === "targeted") {
-        // "Specific Bus Passengers" තේරුවොත් විතරක් පෙන්වන්න
         busContainer.style.display = "block";
     } else {
-        // "All Users" තේරුවොත් හංගන්න
         busContainer.style.display = "none";
-        
-        // ආපහු reset කරන්න (optional)
         document.getElementById("notifFilterDate").value = "";
-        document.getElementById("notifBusId").innerHTML = '<option value="">Pick a date first...</option>';
+        const notifBusId = document.getElementById("notifBusId");
+        if (notifBusId) {
+            notifBusId.innerHTML = '<option value="">Pick Date First</option>';
+            notifBusId.disabled = true;
+        }
     }
 }
-
-// Notification එක යවන ප්‍රධාන function එක
-// Direct Firestore Notification Dispatcher (Error-Free)
+// Mobile App Adapter (NotificationModel) එකට 100% Match වෙන Notification Dispatcher
 async function handleNotificationSend(e) {
     if (e) e.preventDefault();
 
-    // Inputs ලබා ගැනීම
-    const titleInput = document.getElementById("notifTitle") || document.querySelector("input[placeholder*='Title']");
-    const bodyInput = document.getElementById("notifBody") || document.querySelector("textarea");
+    const titleInput = document.getElementById("notifTitle");
+    const bodyInput = document.getElementById("notifBody");
+    const targetSelect = document.getElementById("notifTarget");
+    const busSelect = document.getElementById("notifBusId");
 
     const title = titleInput ? titleInput.value.trim() : "";
     const body = bodyInput ? bodyInput.value.trim() : "";
+    const target = targetSelect ? targetSelect.value : "all";
+    const scheduleId = busSelect ? busSelect.value : "";
 
     if (!title || !body) {
         return alert("Please enter both Notification Title and Message Body!");
     }
 
-    const btn = document.querySelector("#notificationForm button") || (e ? e.target : null);
+    if (target === "targeted" && !scheduleId) {
+        return alert("Please select a specific trip (Date & Bus) to target passengers!");
+    }
+
+    const btn = document.querySelector("#notifications-section button.btn-teal-custom") || (e && e.target ? e.target : null);
     const originalText = btn ? btn.innerHTML : "Dispatch Notification";
 
     if (btn) {
@@ -1022,16 +1046,31 @@ async function handleNotificationSend(e) {
     }
 
     try {
-        // Direct Firestore Broadcast
-        await db.collection("Notifications").add({
+        // Mobile App NotificationModel එකට අදාළ exact field names
+        const notifData = {
             title: title,
-            body: body,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+            message: body,                            // Mobile App එක බලන්නේ 'message'
+            timestamp: Date.now(),                    // long milliseconds (getTimestamp() සඳහා)
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            target: target
+        };
 
-        alert("✅ Notification dispatched to Firestore successfully!");
+        if (target === "targeted") {
+            notifData.scheduleId = scheduleId;
+        }
+
+        // Direct Firestore 'Notifications' Collection එකට Save කිරීම
+        await db.collection("Notifications").add(notifData);
+
+        alert("✅ Notification dispatched successfully to Mobile App!");
+
+        // Form reset
         if (titleInput) titleInput.value = "";
         if (bodyInput) bodyInput.value = "";
+        if (targetSelect) {
+            targetSelect.value = "all";
+            toggleBusSelect();
+        }
 
     } catch (error) {
         console.error("Firestore Notification Error:", error);
