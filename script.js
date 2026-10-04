@@ -1015,17 +1015,15 @@ function toggleBusSelect() {
         }
     }
 }
-// Mobile App Schema එකට 100% Match වෙන Notification Dispatcher
+// Mobile App Schema එකට 100% ගැලපෙන Notification Dispatcher
 async function handleNotificationSend(e) {
     if (e) e.preventDefault();
 
     const titleInput = document.getElementById("notifTitle");
     const bodyInput = document.getElementById("notifBody");
-    const targetSelect = document.getElementById("notifTarget");
 
     const title = titleInput ? titleInput.value.trim() : "";
     const body = bodyInput ? bodyInput.value.trim() : "";
-    const target = targetSelect ? targetSelect.value : "all";
 
     if (!title || !body) {
         return alert("Please enter both Notification Title and Message Body!");
@@ -1040,37 +1038,28 @@ async function handleNotificationSend(e) {
     }
 
     try {
-        // Registered Users ලා ඔක්කොටම Broadcast කිරීමට Users Collection එකෙන් IDs ලබා ගැනීම
+        // Registered Users ලා සියලු දෙනාගේ IDs ලබා ගැනීම
         const usersSnapshot = await db.collection("Users").get();
 
-        if (usersSnapshot.empty) {
-            // Users ලා නැත්නම් Genaral Broadcast එකක් විදිහට Add කිරීම
-            await db.collection("Notifications").add({
-                title: title,
-                message: body,
-                timestamp: Date.now(),
-                isRead: false,
-                userId: "ALL"
-            });
-        } else {
-            // එක් එක් User වෙනුවෙන් Notification Document එකක් Batch Write මගින් Add කිරීම
+        if (!usersSnapshot.empty) {
             let batch = db.batch();
 
             usersSnapshot.forEach(userDoc => {
                 const notifRef = db.collection("Notifications").doc();
                 batch.set(notifRef, {
                     title: title,
-                    message: body,
-                    timestamp: Date.now(),
+                    message: body,               // App එකේ NotificationModel එකේ field name එක
+                    timestamp: Date.now(),       // App එකේ Long timestamp එක
                     isRead: false,
-                    userId: userDoc.id // Mobile App එකට අවශ්‍ය userId එක
+                    userId: userDoc.id           // App එකේ whereEqualTo("userId") එකට Match වීම
                 });
             });
 
             await batch.commit();
+            alert("✅ Notification dispatched to all users successfully!");
+        } else {
+            alert("⚠️ No registered users found in Firestore!");
         }
-
-        alert("✅ Notification dispatched to all users successfully!");
 
         if (titleInput) titleInput.value = "";
         if (bodyInput) bodyInput.value = "";
