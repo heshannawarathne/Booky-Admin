@@ -132,6 +132,8 @@ function renderCitySelects(snapshot) {
 
 
 // ------------------------- BOOKINGS (FILTERED) -------------------------
+let bookingUnsubscribe = null; // Unsubscribe කිරීමට variable එකක්
+
 function loadBusListForFilter() {
     const busFilter = document.getElementById("busFilter");
     if (!busFilter) return;
@@ -160,8 +162,8 @@ function fetchFilteredBookings() {
 
     if (!tbody) return;
 
-    const selectedBus = busFilterElement.value;
-    const rawDate = dateFilterElement.value; 
+    const selectedBus = busFilterElement ? busFilterElement.value : "";
+    const rawDate = dateFilterElement ? dateFilterElement.value : "";
 
     let query = db.collection("Bookings");
 
@@ -171,20 +173,31 @@ function fetchFilteredBookings() {
 
     if (rawDate !== "") {
         const dateObj = new Date(rawDate);
-        const day = dateObj.getDate();
+        // Single digit දවස් වලට leading zero එකක් (04, 05) එකතු කිරීම
+        const day = String(dateObj.getDate()).padStart(2, '0');
         const month = dateObj.toLocaleString('en-GB', { month: 'short' });
         const year = dateObj.getFullYear();
-        const formattedDate = `${day} ${month} ${year}`;
-        query = query.where("date", "==", formattedDate);
+
+        // Firestore එකේ "04 Oct 2026" හෝ "4 Oct 2026" තිබුණත් match වෙන සකස් කිරීම
+        const formattedDatePadded = `${day} ${month} ${year}`;
+        const formattedDateUnpadded = `${dateObj.getDate()} ${month} ${year}`;
+
+        // Single condition search
+        query = query.where("date", "in", [formattedDatePadded, formattedDateUnpadded]);
     }
 
-    query.onSnapshot((querySnapshot) => {
+    // පරණ Snapshot listener එක unsubscribe කිරීම
+    if (bookingUnsubscribe) {
+        bookingUnsubscribe();
+    }
+
+    bookingUnsubscribe = query.onSnapshot((querySnapshot) => {
         tbody.innerHTML = "";
 
         if (querySnapshot.empty) {
             tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted">
                 <i class="fas fa-search d-block mb-2 fs-3"></i>
-                No bookings found for <b>${selectedBus || 'this bus'}</b> on <b>${rawDate || 'this date'}</b>.
+                No bookings found for <b>${selectedBus || 'all buses'}</b> on <b>${rawDate || 'selected date'}</b>.
             </td></tr>`;
             return;
         }
@@ -194,10 +207,19 @@ function fetchFilteredBookings() {
         querySnapshot.forEach((doc) => {
             const booking = doc.data();
             const seatsList = booking.seats ? booking.seats.join(", ") : "N/A";
-            
-            // Check if bus departure time has passed
-            const bookingDateTime = new Date(`${booking.date} ${booking.time}`);
-            const isExpired = now > bookingDateTime;
+
+            // Safe Date Parsing
+            let isExpired = false;
+            try {
+                if (booking.date && booking.time) {
+                    const bookingDateTime = new Date(`${booking.date} ${booking.time}`);
+                    if (!isNaN(bookingDateTime)) {
+                        isExpired = now > bookingDateTime;
+                    }
+                }
+            } catch (e) {
+                isExpired = false;
+            }
 
             const tr = document.createElement("tr");
             if (isExpired) tr.style.opacity = "0.6";
@@ -209,15 +231,15 @@ function fetchFilteredBookings() {
                 </td>
                 <td>
                     <span class="badge bg-light text-dark border">
-                        <i class="fas fa-bus me-1"></i> ${booking.busNo}
+                        <i class="fas fa-bus me-1"></i> ${booking.busNo || 'N/A'}
                     </span>
                 </td>
                 <td>
-                    <div class="fw-medium" style="font-size: 0.85rem;">${booking.fromLocation} ➔ ${booking.toLocation}</div>
+                    <div class="fw-medium" style="font-size: 0.85rem;">${booking.fromLocation || ''} ➔ ${booking.toLocation || ''}</div>
                     <div class="text-teal small mt-1">
                         <i class="fas fa-map-marker-alt me-1"></i> <b>Pickup:</b> ${booking.pickup || "Not specified"}
                     </div>
-                    <div class="text-muted small" style="font-size: 0.75rem;">${booking.date} | ${booking.time} ${isExpired ? '<span class="text-danger fw-bold">(Passed)</span>' : ''}</div>
+                    <div class="text-muted small" style="font-size: 0.75rem;">${booking.date || ''} | ${booking.time || ''} ${isExpired ? '<span class="text-danger fw-bold">(Passed)</span>' : ''}</div>
                 </td>
                 <td>
                     <div class="badge bg-light border" style="font-size: 0.75rem; color: #000;">
@@ -245,9 +267,10 @@ function fetchFilteredBookings() {
             `;
             tbody.appendChild(tr);
         });
+    }, (error) => {
+        console.error("Bookings Fetch Error:", error);
     });
 }
-
 // ------------------------- USERS -------------------------
 function fetchUsers() {
     const tbody = document.getElementById("usersTableBody");
@@ -721,7 +744,7 @@ document.getElementById("scheduleForm")?.addEventListener("submit", async functi
 
 
 // Map එක load කරන්න අමතක කරන්න එපා
-window.addEventListener('load', initMap);
+window.addEventListener('load', initMaps);
 
 
 // 1. නගර ටික Load කරන කොට Filter dropdowns දෙකටත් ඒවා දාන්න
@@ -975,64 +998,48 @@ function toggleBusSelect() {
 }
 
 // Notification එක යවන ප්‍රධාන function එක
-function handleNotificationSend() {
-    const title = document.getElementById("notifTitle").value;
-    const body = document.getElementById("notifBody").value;
-    const target = document.getElementById("notifTarget").value;
-    const scheduleId = document.getElementById("notifScheduleId").value;
+// Direct Firestore Notification Dispatcher (Error-Free)
+async function handleNotificationSend(e) {
+    if (e) e.preventDefault();
 
-    // Validation: Title සහ Body හිස්නම් යවන්න දෙන්න එපා
+    // Inputs ලබා ගැනීම
+    const titleInput = document.getElementById("notifTitle") || document.querySelector("input[placeholder*='Title']");
+    const bodyInput = document.getElementById("notifBody") || document.querySelector("textarea");
+
+    const title = titleInput ? titleInput.value.trim() : "";
+    const body = bodyInput ? bodyInput.value.trim() : "";
+
     if (!title || !body) {
-        alert("Please enter both Title and Message Body.");
-        return;
+        return alert("Please enter both Notification Title and Message Body!");
     }
 
-    // Targeted notification එකක් නම් Schedule එකක් තෝරලා තියෙන්නම ඕනේ
-    if (target === "targeted" && !scheduleId) {
-        alert("Please select a specific journey (Date/Bus/Time) to target passengers.");
-        return;
+    const btn = document.querySelector("#notificationForm button") || (e ? e.target : null);
+    const originalText = btn ? btn.innerHTML : "Dispatch Notification";
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Dispatching...';
     }
 
-    // Loading එකක් පෙන්වන්න (User experience එකට හොඳයි)
-    const btn = event.target;
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Dispatching...';
+    try {
+        // Direct Firestore Broadcast
+        await db.collection("Notifications").add({
+            title: title,
+            body: body,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
 
-    // FormData පාවිච්චි කරලා Servlet එකට ඩේටා යවනවා
-    const params = new URLSearchParams();
-    params.append("title", title);
-    params.append("body", body);
-    params.append("target", target);
-    if (target === "targeted") {
-        params.append("scheduleId", scheduleId);
-    }
+        alert("✅ Notification dispatched to Firestore successfully!");
+        if (titleInput) titleInput.value = "";
+        if (bodyInput) bodyInput.value = "";
 
-    // AJAX (Fetch API) එක හරහා Servlet එකට Request එක යැවීම
-    fetch("sendNotification", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: params
-    })
-    .then(response => {
-        if (response.ok) {
-            alert("✅ Notification dispatched successfully!");
-            // Form එක reset කරනවා
-            document.getElementById("notifTitle").value = "";
-            document.getElementById("notifBody").value = "";
-        } else {
-            alert("❌ Failed to send notification. Please check the server logs.");
+    } catch (error) {
+        console.error("Firestore Notification Error:", error);
+        alert("❌ Error dispatching notification: " + error.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
         }
-    })
-    .catch(error => {
-        console.error("Error:", error);
-        alert("❌ An error occurred while connecting to the server.");
-    })
-    .finally(() => {
-        // බටන් එක ආපහු normal කරනවා
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-    });
+    }
 }
